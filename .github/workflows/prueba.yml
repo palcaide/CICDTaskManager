@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: '21', cache: maven}
-      - run: mvn compile --batch mode
+      - run: mvn compile --batch-mode
 
   test:
     needs: compile
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: '21', cache: maven}
-      - run: mvn test --batch mode
+      - run: mvn test --batch-mode
       - if: always()
         uses: actions/upload-artifact@v4
         with: {name: test-results, path: target/surefire-reports/}
