@@ -1,0 +1,37 @@
+name: CICD Task Manager 
+
+on: 
+  push
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: 21, cache: maven}
+      - run: mvn compile --batch-mode # batch mode indica a la maquina que es una automatización sin humanos: no preguntes nada por la terminal
+    
+  test:
+    needs: compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: 21, cache: maven}
+      - run: mvn test --batch-mode
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: test-results, path: target/surefire-reports/ }
+  
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: 21, cache: maven}
+      - run: mvn -B clean package
+      - uses: actions/upload-artifact@v4
+        with: {name: app-jar, path: target/*.jar}  
+          
