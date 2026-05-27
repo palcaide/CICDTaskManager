@@ -22,8 +22,11 @@ jobs:
       - run: mvn test --batch-mode
       - if: always()
         uses: actions/upload-artifact@v4
-        with: {name: test-results, path: target/surefire-reports/}
-  
+        with: {name: test-results, path: target/surefire-reports/} 
+
+        # pase lo que pase, genera un log y subelo a dicho path con el nombre de test-results
+
+
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -34,4 +37,5 @@ jobs:
       - run: mvn -B clean package
       - uses: actions/upload-artifact@v4
         with: {name: app-jar, path: target/*.jar}
-          
+        
+        # sube a ese path la carpeta .jar genenerad. subelo con el nombre de name
