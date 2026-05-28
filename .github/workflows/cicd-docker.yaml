@@ -45,49 +45,45 @@ jobs:
         with: {name: app-jar, path: 'target/*.jar'} # Comillas simples para evitar fallos de sintaxis
 
   # =========================================================================
-  # JOB 4: DOCKER PUBLISH (Construye la imagen y la sube a Docker Hub)
+  # JOB 4: DOCKER PUBLISH (Corregido)
   # =========================================================================
   docker_publish:
-    needs: build # OBLIGATORIO: Solo se ejecuta si el JAR se ha construido con éxito
-    runs-on: ubuntu-latest # Corre en la nube de GitHub de forma segura
+    needs: build
+    runs-on: ubuntu-latest
     
     steps:
-      # Paso Extra Obligatorio: Descargamos el archivo .jar generado en el Job 3
-      # para que el Dockerfile de la raíz pueda copiarlo dentro de la imagen.
+      # ── Paso 1: Checkout (¡SIEMPRE EL PRIMERO!) ─────────────────────────
+      # Clona el repositorio y trae el Dockerfile. Deja la máquina lista.
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # ── Paso 2: Descargar el archivo JAR (¡AHORA SÍ!) ────────────────────
+      # Descargamos el ejecutable DESPUÉS del checkout para que no lo borre.
       - name: Descargar el archivo JAR
         uses: actions/download-artifact@v4
         with:
           name: app-jar
-          path: target/ # Lo mete en la carpeta target/ que es donde lo busca el Dockerfile
+          path: target/ # Lo mete limpito dentro de la carpeta target/ que acaba de crear el checkout
 
-      # ── Paso 1: Checkout ────────────────────────────────────────────────
-      # Copia el código fuente (incluido tu archivo 'Dockerfile') a la máquina virtual
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      # ── Paso 2: Docker Login ────────────────────────────────────────────
-      # Se autentica en tu cuenta de Docker Hub usando tus Secrets privados
+      # ── Paso 3: Docker Login ────────────────────────────────────────────
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      # ── Paso 3: Metadata (Etiquetas inteligentes de Git) ────────────────
-      # Analiza la rama o el commit para generar nombres inteligentes automáticos
+      # ── Paso 4: Metadata ────────────────────────────────────────────────
       - name: Extract Docker metadata
-        id: meta # Clave: ID para poder pasarle los resultados al siguiente paso
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: pabloalcaide/examen-hospital # Nombre base de tu repositorio en Docker Hub
+          images: pabloalcaide/examen-hospital
 
-      # ── Paso 4: Build & Push ────────────────────────────────────────────
-      # Lee el Dockerfile, inyecta el JAR, genera la imagen y la sube a internet
+      # ── Paso 5: Build & Push ────────────────────────────────────────────
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: . # Indica que busque el Dockerfile en la raíz del proyecto
-          push: true # Sube la imagen automáticamente a Docker Hub al terminar
-          # Usa de forma dinámica las etiquetas y labels que calculó el Paso 3
+          context: .
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
