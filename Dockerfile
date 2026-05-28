@@ -12,3 +12,5 @@ EXPOSE 8080
 
 # 5. Arrancamos el gestor de tareas al encender el contenedor
 ENTRYPOINT ["java", "-jar", "app.jar"]
+
+## he añadido los secrets en github
