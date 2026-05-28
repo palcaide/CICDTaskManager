@@ -1,0 +1,94 @@
+name: Docker Build & Push on Github # Nombre del flujo de trabajo
+
+on:
+  push:
+    branches: [ "main" ] # Se activa al hacer push en la rama principal
+    tags: [ 'v*.*.*' ]   # Se activa al crear etiquetas de versión (ej: v1.0.0)
+  pull_request:
+    branches: [ "main" ] # Se activa al abrir o actualizar una Pull Request hacia main
+
+env:
+  # CONSTRUCCIÓN DINÁMICA DEL NOMBRE DE LA IMAGEN:
+  # Une tu usuario de Docker Hub con el nombre exacto que le hayas puesto a este repositorio en GitHub.
+  # Así el script es genérico y funciona en cualquier repositorio sin cambiar texto a mano.
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest # Se ejecuta en la máquina virtual Linux de GitHub
+    
+    # PERMISOS DE SEGURIDAD: Define qué puede hacer el token interno de GitHub Actions
+    permissions:
+      contents: read   # Permite leer el código del repositorio
+      packages: write  # Permite escribir y publicar paquetes (requisito si se usara el registro de GitHub)
+
+    steps:
+      # ── Paso 1: Clonar el Repositorio ───────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Trae el código y el Dockerfile a la máquina virtual
+
+      # ── Paso 2: Configurar QEMU (Emulador Multi-arquitectura) ───────────
+      # Permite que la máquina de GitHub (que es x86_64) pueda fabricar imágenes 
+      # compatibles con procesadores diferentes, como los chips ARM de los Mac modernos o servidores Cloud.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # ── Paso 3: Configurar Docker Buildx (Motor de Compilación Pro) ──────
+      # Activa el motor moderno de Docker que habilita la compilación en paralelo,
+      # el uso de cachés avanzadas y soporte para múltiples plataformas.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Paso 4: Autenticación en Docker Hub (Con Control de Seguridad) ──
+      # FILTRO CLAVE: "if: github.event_name != 'pull_request'"
+      # Evita iniciar sesión si el pipeline se ha disparado por una Pull Request de otra persona.
+      # Así se impide que usuarios externos maliciosos puedan robar tus Secrets enviando código modificado.
+      - name: Log into registry ${{ vars.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY }} # Servidor de Docker (usa la variable global que configuramos antes)
+          username: ${{ secrets.DOCKERHUB_USERNAME }} # Tu usuario de Docker Hub
+          password: ${{ secrets.DOCKERHUB_TOKEN }}    # Tu Token de acceso de Docker Hub
+
+      # ── Paso 5: Extracción de Metadata (Etiquetas Inteligentes) ──────────
+      # Genera automáticamente los nombres y etiquetas que llevará la imagen en internet:
+      # - type=ref,event=branch -> Si estás en main, creará: nombre-imagen:main
+      # - type=ref,event=tag    -> Si creas una release, creará: nombre-imagen:v1.0.0
+      # - type=sha,format=short -> Le añade el código corto del commit de Git: nombre-imagen:a1b2c3d
+      # - type=raw,value=latest... -> Pone la etiqueta :latest SOLO si estás en la rama por defecto (main)
+      - name: Extract Docker metadata
+        id: meta # ID necesario para poder extraer sus outputs en el siguiente paso
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # ── Paso 6: Construcción y Publicación de la Imagen ─────────────────
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Ubicación del Dockerfile (raíz del proyecto)
+          # CONTROL DE SUBIDA: Solo hace el 'push' real a internet si NO es una Pull Request.
+          # Si es una PR, compilará la imagen para verificar que no da fallos, pero no la subirá.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}     # Aplica las etiquetas calculadas en el Paso 5
+          labels: ${{ steps.meta.outputs.labels }} # Aplica los metadatos calculados en el Paso 5
+          
+          # ⚡ OPTIMIZACIÓN DE CACHÉ DE GITHUB ACTIONS:
+          # Guarda las capas del Dockerfile en el almacenamiento interno de GitHub.
+          # En el siguiente push, si el Dockerfile no ha cambiado, se salta la compilación y tarda segundos.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+          # 🖥️ ESPECIFICACIÓN DE PLATAFORMA:
+          # Fuerza a que la imagen se construya optimizada para arquitectura Linux ARM64
+          platforms: linux/arm64
+          
+          # Si la red de Docker Hub da un microcorte o falla, reintenta la subida hasta 3 veces antes de dar rojo.
+          retrying-max-attempts: 3
