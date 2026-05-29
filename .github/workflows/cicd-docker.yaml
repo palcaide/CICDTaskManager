@@ -77,7 +77,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: pabloalcaide/examen-hospital
+          images: pabloalcaide/examen-hospital # nombre de user/nombre del repo actual
 
       # ── Paso 5: Build & Push ────────────────────────────────────────────
       - name: Build and push Docker image
